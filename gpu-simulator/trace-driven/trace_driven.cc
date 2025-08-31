@@ -1,11 +1,14 @@
-// Copyright (c) 2018-2021, Mahmoud Khairy, Vijay Kandiah, Timothy Rogers, Tor M. Aamodt, Nikos Hardavellas
-// Northwestern University, Purdue University, The University of British Columbia
+// Copyright (c) 2018-2021, Mahmoud Khairy, Vijay Kandiah, Timothy Rogers, Tor
+// M. Aamodt, Nikos Hardavellas
+// Northwestern University, Purdue University, The University of British
+// Columbia
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
 //
-// 1. Redistributions of source code must retain the above copyright notice, this
+// 1. Redistributions of source code must retain the above copyright notice,
+// this
 //    list of conditions and the following disclaimer;
 // 2. Redistributions in binary form must reproduce the above copyright notice,
 //    this list of conditions and the following disclaimer in the documentation
@@ -37,13 +40,13 @@
 #include <string>
 #include <vector>
 
+#include "../ISA_Def/accelwattch_component_mapping.h"
 #include "../ISA_Def/ampere_opcode.h"
 #include "../ISA_Def/kepler_opcode.h"
 #include "../ISA_Def/pascal_opcode.h"
 #include "../ISA_Def/trace_opcode.h"
 #include "../ISA_Def/turing_opcode.h"
 #include "../ISA_Def/volta_opcode.h"
-#include "../ISA_Def/accelwattch_component_mapping.h"
 #include "abstract_hardware_model.h"
 #include "cuda-sim/cuda-sim.h"
 #include "cuda-sim/ptx_ir.h"
@@ -91,7 +94,8 @@ trace_kernel_info_t::trace_kernel_info_t(dim3 gridDim, dim3 blockDim,
                                          trace_parser *parser,
                                          class trace_config *config,
                                          kernel_trace_t *kernel_trace_info)
-    : kernel_info_t(gridDim, blockDim, m_function_info) {
+    : kernel_info_t(gridDim, blockDim, m_function_info,
+                    kernel_trace_info->cuda_stream_id) {
   m_parser = parser;
   m_tconfig = config;
   m_kernel_trace_info = kernel_trace_info;
@@ -120,12 +124,12 @@ trace_kernel_info_t::trace_kernel_info_t(dim3 gridDim, dim3 blockDim,
 
 void trace_kernel_info_t::get_next_threadblock_traces(
     std::vector<std::vector<inst_trace_t> *> threadblock_traces) {
-  m_parser->get_next_threadblock_traces(threadblock_traces,
-                                        m_kernel_trace_info->trace_verion,
-                                        m_kernel_trace_info->ifs);
+  m_parser->get_next_threadblock_traces(
+      threadblock_traces, m_kernel_trace_info->trace_verion,
+      m_kernel_trace_info->enable_lineinfo, m_kernel_trace_info->pipeReader);
 }
 
-types_of_operands get_oprnd_type(op_type op, special_ops sp_op){
+types_of_operands get_oprnd_type(op_type op, special_ops sp_op) {
   switch (op) {
     case SP_OP:
     case SFU_OP:
@@ -143,7 +147,13 @@ types_of_operands get_oprnd_type(op_type op, special_ops sp_op){
         return FP_OP;
       else if (sp_op == INT__OP)
         return INT_OP;
-    default: 
+    case LUT_CALCULATE_ADDRESS_OP: 
+      std::cout << "#FLAG-TODO#" << std::endl; 
+      return INT_OP;
+    case LUT_LOOKUP_OP: 
+      std::cout << "#FLAG-TODO#" << std::endl; 
+      return INT_OP;
+    default:
       return UN_OP;
   }
 }
@@ -174,6 +184,7 @@ bool trace_warp_inst_t::parse_from_trace_struct(
 
   is_vectorin = 0;
   is_vectorout = 0;
+  pred = 0;
   ar1 = 0;
   ar2 = 0;
   memory_op = no_memory_op;
@@ -195,36 +206,33 @@ bool trace_warp_inst_t::parse_from_trace_struct(
     op = (op_type)(it->second.opcode_category);
     const std::unordered_map<unsigned, unsigned> *OpcPowerMap = &OpcodePowerMap;
     std::unordered_map<unsigned, unsigned>::const_iterator it2 =
-      OpcPowerMap->find(m_opcode);
-    if(it2 != OpcPowerMap->end())
-      sp_op = (special_ops) (it2->second);
-      oprnd_type = get_oprnd_type(op, sp_op);
+        OpcPowerMap->find(m_opcode);
+    if (it2 != OpcPowerMap->end()) sp_op = (special_ops)(it2->second);
+    oprnd_type = get_oprnd_type(op, sp_op);
   } else {
     std::cout << "ERROR:  undefined instruction : " << trace.opcode
               << " Opcode: " << opcode1 << std::endl;
     assert(0 && "undefined instruction");
   }
   std::string opcode = trace.opcode;
-  if(opcode1 == "MUFU"){ // Differentiate between different MUFU operations for power model
-    if ((opcode == "MUFU.SIN") || (opcode == "MUFU.COS"))
-      sp_op = FP_SIN_OP;
-    if ((opcode == "MUFU.EX2") || (opcode == "MUFU.RCP"))
-      sp_op = FP_EXP_OP;
-    if (opcode == "MUFU.RSQ") 
-      sp_op = FP_SQRT_OP;
-    if (opcode == "MUFU.LG2") 
-      sp_op = FP_LG_OP;
+  if (opcode1 == "MUFU") {  // Differentiate between different MUFU operations
+                            // for power model
+    if ((opcode == "MUFU.SIN") || (opcode == "MUFU.COS")) sp_op = FP_SIN_OP;
+    if ((opcode == "MUFU.EX2") || (opcode == "MUFU.RCP")) sp_op = FP_EXP_OP;
+    if (opcode == "MUFU.RSQ") sp_op = FP_SQRT_OP;
+    if (opcode == "MUFU.LG2") sp_op = FP_LG_OP;
   }
 
-  if(opcode1 == "IMAD"){ // Differentiate between different IMAD operations for power model
-    if ((opcode == "IMAD.MOV") || (opcode == "IMAD.IADD"))
-      sp_op = INT__OP;
+  if (opcode1 == "IMAD") {  // Differentiate between different IMAD operations
+                            // for power model
+    if ((opcode == "IMAD.MOV") || (opcode == "IMAD.IADD")) sp_op = INT__OP;
   }
-  
+
   // fill regs information
   num_regs = trace.reg_srcs_num + trace.reg_dsts_num;
   num_operands = num_regs;
   outcount = trace.reg_dsts_num;
+  std::cout << "#FLAG-REG# " << num_regs << ", " << num_operands << ", " << outcount << std::endl; 
   for (unsigned m = 0; m < trace.reg_dsts_num; ++m) {
     out[m] =
         trace.reg_dest[m] + 1;  // Increment by one because GPGPU-sim starts
@@ -249,10 +257,9 @@ bool trace_warp_inst_t::parse_from_trace_struct(
       set_addr(i, trace.memadd_info->addrs[i]);
   }
 
-
   // handle special cases and fill memory space
   switch (m_opcode) {
-    case OP_LDC: //handle Load from Constant
+    case OP_LDC:  // handle Load from Constant
       data_size = 4;
       memory_op = memory_load;
       const_cache_operand = 1;
@@ -260,6 +267,10 @@ bool trace_warp_inst_t::parse_from_trace_struct(
       cache_op = CACHE_ALL;
       break;
     case OP_LDG:
+    // LDGSTS is loading the values needed directly from the global memory to
+    // shared memory. Before this feature, the values need to be loaded to
+    // registers first, then store to the shared memory.
+    case OP_LDGSTS:  // Add for memcpy_async
     case OP_LDL:
       assert(data_size > 0);
       memory_op = memory_load;
@@ -268,9 +279,12 @@ bool trace_warp_inst_t::parse_from_trace_struct(
         space.set_type(local_space);
       else
         space.set_type(global_space);
+      // Add for LDGSTS instruction
+      if (m_opcode == OP_LDGSTS) m_is_ldgsts = true;
       // check the cache scope, if its strong GPU, then bypass L1
-      if (trace.check_opcode_contain(opcode_tokens, "STRONG") &&
-          trace.check_opcode_contain(opcode_tokens, "GPU")) {
+      if ((trace.check_opcode_contain(opcode_tokens, "STRONG") &&
+           trace.check_opcode_contain(opcode_tokens, "GPU")) ||
+          trace.check_opcode_contain(opcode_tokens, "BYPASS")) {
         cache_op = CACHE_GLOBAL;
       }
       break;
@@ -363,6 +377,22 @@ bool trace_warp_inst_t::parse_from_trace_struct(
       // barrier_type bar_type;
       // reduction_type red_type;
       break;
+    // LDGDEPBAR is to form a group containing the previous LDGSTS instructions
+    // that have not been grouped yet. In the implementation, a group number
+    // will be assigned once the instruction is met.
+    case OP_LDGDEPBAR:
+      m_is_ldgdepbar = true;
+      break;
+    // DEPBAR is served as a warp-wise barrier that is only effective for LDGSTS
+    // instructions. It is associated with a immediate value. The immediate
+    // value indicates the last N LDGDEPBAR groups to not wait once the
+    // instruction is met. For example, if the immediate value is 1, then the
+    // last group is able to proceed even with DEPBAR present; if the immediate
+    // value is 0, then all of the groups need to finish before proceed.
+    case OP_DEPBAR:
+      m_is_depbar = true;
+      m_depbar_group_no = trace.imm;
+      break;
     case OP_HADD2:
     case OP_HADD2_32I:
     case OP_HFMA2:
@@ -372,6 +402,9 @@ bool trace_warp_inst_t::parse_from_trace_struct(
     case OP_HSETP2:
       initiation_interval =
           initiation_interval / 2;  // FP16 has 2X throughput than FP32
+      if (initiation_interval <
+          1)  // Make sure initiaion interval never goes below 1
+        initiation_interval = 1;
       break;
     default:
       break;
@@ -413,6 +446,16 @@ void trace_config::reg_options(option_parser_t opp) {
                          "Opcode latencies and initiation for tensor in trace "
                          "driven mode <latency,initiation>",
                          "4,1");
+  option_parser_register(opp, "-trace_opcode_latency_initiation_lut_calculateaddress",
+                         OPT_CSTR, &trace_opcode_latency_initiation_lut_calculateaddress,
+                         "Opcode latencies and initiation for LUT calculate address in trace "
+                         "driven mode <latency,initiation>",
+                         "4,1");
+  option_parser_register(opp, "-trace_opcode_latency_initiation_lut_lookup",
+                         OPT_CSTR, &trace_opcode_latency_initiation_lut_lookup,
+                         "Opcode latencies and initiation for LUT lookup in trace "
+                         "driven mode <latency,initiation>",
+                         "4,1");
 
   for (unsigned j = 0; j < SPECIALIZED_UNIT_NUM; ++j) {
     std::stringstream ss;
@@ -432,6 +475,10 @@ void trace_config::parse_config() {
   sscanf(trace_opcode_latency_initiation_sfu, "%u,%u", &sfu_latency, &sfu_init);
   sscanf(trace_opcode_latency_initiation_tensor, "%u,%u", &tensor_latency,
          &tensor_init);
+  sscanf(trace_opcode_latency_initiation_lut_calculateaddress, "%u,%u",
+         &lut_calculateaddress_latency, &lut_calculateaddress_init);
+  sscanf(trace_opcode_latency_initiation_lut_lookup, "%u,%u",
+         &lut_lookup_latency, &lut_lookup_init);
 
   for (unsigned j = 0; j < SPECIALIZED_UNIT_NUM; ++j) {
     sscanf(trace_opcode_latency_initiation_specialized_op[j], "%u,%u",
@@ -467,6 +514,13 @@ void trace_config::set_latency(unsigned category, unsigned &latency,
       latency = tensor_latency;
       initiation_interval = tensor_init;
       break;
+    case LUT_CALCULATE_ADDRESS_OP:
+      latency = lut_calculateaddress_latency;
+      initiation_interval = lut_calculateaddress_init;
+      break; 
+    case LUT_LOOKUP_OP:
+      latency = lut_lookup_latency;
+      initiation_interval = lut_lookup_init;
     default:
       break;
   }
@@ -509,6 +563,7 @@ void trace_shader_core_ctx::get_pdom_stack_top_info(unsigned warp_id,
                                                     unsigned *pc,
                                                     unsigned *rpc) {
   // In trace-driven mode, we assume no control hazard
+  assert(pI != NULL && "Unexpexted behaviour , inst should not be null");
   *pc = pI->pc;
   *rpc = pI->pc;
 }
@@ -557,7 +612,20 @@ const warp_inst_t *trace_shader_core_ctx::get_next_inst(unsigned warp_id,
   // read the inst from the traces
   trace_shd_warp_t *m_trace_warp =
       static_cast<trace_shd_warp_t *>(m_warp[warp_id]);
-  return m_trace_warp->get_next_trace_inst();
+  const trace_warp_inst_t *ret = m_trace_warp->get_next_trace_inst();
+  if (m_trace_warp->trace_done()) {
+    if (!m_warp[warp_id]->inst_in_pipeline() &&
+        m_warp[warp_id]->stores_done() &&
+        !m_scoreboard->pendingWrites(warp_id)) {
+      for (unsigned t = 0; t < m_warp_size; t++) {
+        if (m_warp[warp_id]->test_active(t)) {
+          m_warp[warp_id]->set_completed(t);
+        }
+      }
+      m_barriers.warp_exit(warp_id);
+    }
+  }
+  return ret;
 }
 
 void trace_shader_core_ctx::updateSIMTStack(unsigned warpId,
@@ -599,10 +667,6 @@ void trace_shader_core_ctx::checkExecutionStatusAndUpdate(warp_inst_t &inst,
         inst.data_size, (new_addr_type *)localaddrs);
     inst.set_addr(t, (new_addr_type *)localaddrs, num_addrs);
   }
-
-  if (inst.op == EXIT_OPS) {
-    m_warp[inst.warp_id()]->set_completed(t);
-  }
 }
 
 void trace_shader_core_ctx::func_exec_inst(warp_inst_t &inst) {
@@ -615,17 +679,9 @@ void trace_shader_core_ctx::func_exec_inst(warp_inst_t &inst) {
       checkExecutionStatusAndUpdate(inst, t, tid);
     }
   }
-
   // here, we generate memory acessess and set the status if thread (done?)
   if (inst.is_load() || inst.is_store()) {
     inst.generate_mem_accesses();
-  }
-
-  trace_shd_warp_t *m_trace_warp =
-      static_cast<trace_shd_warp_t *>(m_warp[inst.warp_id()]);
-  if (m_trace_warp->trace_done() && m_trace_warp->functional_done()) {
-    m_trace_warp->ibuffer_flush();
-    m_barriers.warp_exit(inst.warp_id());
   }
 }
 

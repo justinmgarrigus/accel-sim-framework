@@ -1,11 +1,14 @@
-// Copyright (c) 2018-2021, Mahmoud Khairy, Vijay Kandiah, Timothy Rogers, Tor M. Aamodt, Nikos Hardavellas
-// Northwestern University, Purdue University, The University of British Columbia
+// Copyright (c) 2018-2021, Mahmoud Khairy, Vijay Kandiah, Timothy Rogers, Tor
+// M. Aamodt, Nikos Hardavellas
+// Northwestern University, Purdue University, The
+// University of British Columbia
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
 //
-// 1. Redistributions of source code must retain the above copyright notice, this
+// 1. Redistributions of source code must retain the above copyright notice,
+// this
 //    list of conditions and the following disclaimer;
 // 2. Redistributions in binary form must reproduce the above copyright notice,
 //    this list of conditions and the following disclaimer in the documentation
@@ -90,7 +93,7 @@ class trace_kernel_info_t : public kernel_info_t {
   void get_next_threadblock_traces(
       std::vector<std::vector<inst_trace_t> *> threadblock_traces);
 
-  unsigned long get_cuda_stream_id() {
+  unsigned long long get_cuda_stream_id() {
     return m_kernel_trace_info->cuda_stream_id;
   }
 
@@ -121,8 +124,8 @@ class trace_config {
   char *get_traces_filename() { return g_traces_filename; }
 
  private:
-  unsigned int_latency, fp_latency, dp_latency, sfu_latency, tensor_latency;
-  unsigned int_init, fp_init, dp_init, sfu_init, tensor_init;
+  unsigned int_latency, fp_latency, dp_latency, sfu_latency, tensor_latency, lut_calculateaddress_latency, lut_lookup_latency;
+  unsigned int_init, fp_init, dp_init, sfu_init, tensor_init, lut_calculateaddress_init, lut_lookup_init;
   unsigned specialized_unit_latency[SPECIALIZED_UNIT_NUM];
   unsigned specialized_unit_initiation[SPECIALIZED_UNIT_NUM];
 
@@ -132,6 +135,8 @@ class trace_config {
   char *trace_opcode_latency_initiation_dp;
   char *trace_opcode_latency_initiation_sfu;
   char *trace_opcode_latency_initiation_tensor;
+  char *trace_opcode_latency_initiation_lut_calculateaddress;
+  char *trace_opcode_latency_initiation_lut_lookup;
   char *trace_opcode_latency_initiation_specialized_op[SPECIALIZED_UNIT_NUM];
 };
 

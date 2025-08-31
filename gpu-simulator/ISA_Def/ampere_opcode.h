@@ -87,6 +87,7 @@ static const std::unordered_map<std::string, OpcodeChar> Ampere_OpcodeMap = {
 
     // Conversion Instructions
     {"F2F", OpcodeChar(OP_F2F, ALU_OP)},
+    {"F2FP", OpcodeChar(OP_F2FP, ALU_OP)},
     {"F2I", OpcodeChar(OP_F2I, ALU_OP)},
     {"I2F", OpcodeChar(OP_I2F, ALU_OP)},
     {"I2I", OpcodeChar(OP_I2I, ALU_OP)},
@@ -227,6 +228,9 @@ static const std::unordered_map<std::string, OpcodeChar> Ampere_OpcodeMap = {
     {"VOTE", OpcodeChar(OP_VOTE, ALU_OP)},
     {"VOTE_VTG", OpcodeChar(OP_VOTE_VTG, ALU_OP)},
 
+    // LUT Instructions
+    {"LUTCALCULATEADDRESS", OpcodeChar(OP_LUTCALCULATEADDRESS, LUT_CALCULATE_ADDRESS_OP)}, 
+    {"LUTLOOKUP", OpcodeChar(OP_LUTLOOKUP, LUT_LOOKUP_OP)}
 };
 
 #endif
